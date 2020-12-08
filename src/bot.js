@@ -1,5 +1,10 @@
 require('dotenv').config();
 
+const express = require('express');
+const app = express();
+const port = process.env.PORT || 5000;
+
+
 const Twit = require('twit');
 let clientIsReady = false;
 const { Client, MessageEmbed } = require('discord.js');
@@ -16,7 +21,7 @@ const hololiveMemberIds = {
   'natsuiromatsuri': '996645451045617664',
   'shirakamifubuki': '997786053124616192',
   'akaihaato': '998336069992001537',
-  'yozoramel': '1336194118565826561',
+  'yozoramel': '985703615758123008',
   'oozorasubaru': '1027853566780698624',
   'yuzukichococh': '1024970912859189248',
   'nakiriayame': '1024532356554608640',
@@ -123,3 +128,9 @@ client.on('message', message => {
       message.channel.send('Invalid command');
   }
 })
+
+app.get("/", (req, res) => {
+  res.end('Nothing to see here')
+});
+
+app.listen(port, () => console.log(`App is running on ${port}`))
