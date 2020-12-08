@@ -13,7 +13,7 @@ const hololiveMemberIds = {
   'sakuramiko35': '979891380616019968',
   'AZKi_VDiVA': '1062499145267605504',
   'akirosenthal': '996643748862836736',
-  'natsuiromatsuri': '1336331342246658048',
+  'natsuiromatsuri': '996645451045617664',
   'shirakamifubuki': '997786053124616192',
   'akaihaato': '998336069992001537',
   'yozoramel': '1336194118565826561',
