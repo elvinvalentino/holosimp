@@ -52,7 +52,8 @@ const hololiveMemberIds = {
   'kureijiollie': '1328277233492844544',
   'hololive_Id': '1204978594490961920',
   'hololive_En': '1198438560224829442',
-  'hololive_Jp': '1279066164186906629'
+  'hololive_Jp': '1279066164186906629',
+  'dt52231658': '1336329443103522819'
 }
 
 const T = new Twit({
@@ -62,10 +63,10 @@ const T = new Twit({
   access_token_secret: process.env.ACCESS_TOKEN_SECRET
 });
 
-// T.get('users/show', { screen_name: 'yukihanalamy' }, (err, data, res) => {
-//   if (err) return console.log(err);
-//   console.log(data)
-// })
+T.get('users/show', { screen_name: 'dt52231658' }, (err, data, res) => {
+  if (err) return console.log(err);
+  console.log(data)
+})
 
 client.login(process.env.DISCORDJS_BOT_TOKEN);
 
