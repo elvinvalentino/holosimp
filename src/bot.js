@@ -86,13 +86,12 @@ client.on('newTweet', data => {
   const channel = guild.channels.cache.find(c => c.name === 'tweets');
   data = data.data
   if (Object.keys(hololiveMemberIds).includes(data.user.screen_name)) {
-    let headline;
     if (data.in_reply_to_status_id) {
-      headline = `**@${data.user.screen_name}** replied`;
+      channel.send(`**@${data.user.screen_name}** replied`);
     } else if (data.hasOwnProperty('retweeted_status')) {
-      headline = `**@${data.user.screen_name}** retweeted`;
+      channel.send(`**@${data.user.screen_name}** retweeted`);
     } else {
-      headline = `**@${data.user.screen_name}** tweeted`;
+      channel.send(`**@${data.user.screen_name}** tweeted`);
     }
     channel.send(`${headline}\nhttps://twitter.com/${data.user.screen_name}/status/${data.id_str}`);
   }
