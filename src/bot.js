@@ -19,6 +19,7 @@ const hololiveMemberIds = {
   'AZKi_VDiVA': '1062499145267605504',
   'akirosenthal': '996643748862836736',
   'natsuiromatsuri': '996645451045617664',
+  '7216_2nd': '1122810226153938944',
   'shirakamifubuki': '997786053124616192',
   'akaihaato': '998336069992001537',
   'yozoramel': '985703615758123008',
@@ -68,7 +69,7 @@ const T = new Twit({
   access_token_secret: process.env.ACCESS_TOKEN_SECRET
 });
 
-// T.get('users/show', { screen_name: 'dt52231658' }, (err, data, res) => {
+// T.get('users/show', { screen_name: '7216_2nd' }, (err, data, res) => {
 //   if (err) return console.log(err);
 //   console.log(data)
 // })
@@ -85,14 +86,15 @@ client.on('newTweet', data => {
   const channel = guild.channels.cache.find(c => c.name === 'tweets');
   data = data.data
   if (Object.keys(hololiveMemberIds).includes(data.user.screen_name)) {
+    let headline;
     if (data.in_reply_to_status_id) {
-      channel.send(`**@${data.user.screen_name}** replied`)
+      headline = `**@${data.user.screen_name}** replied`;
     } else if (data.hasOwnProperty('retweeted_status')) {
-      channel.send(`**@${data.user.screen_name}** retweeted`)
+      headline = `**@${data.user.screen_name}** retweeted`;
     } else {
-      channel.send(`**@${data.user.screen_name}** tweeted`)
+      headline = `**@${data.user.screen_name}** tweeted`;
     }
-    channel.send(`https://twitter.com/${data.user.screen_name}/status/${data.id_str}`);
+    channel.send(`${headline}\nhttps://twitter.com/${data.user.screen_name}/status/${data.id_str}`);
   }
 })
 
@@ -121,8 +123,8 @@ client.on('message', message => {
         message.channel.send(content)
       }
       break;
-    case 'test':
-      message.channel.send('**<@Black >**');
+    case 'status':
+      message.channel.send('**Status: Alive**');
       break;
     default:
       message.channel.send('Invalid command');
