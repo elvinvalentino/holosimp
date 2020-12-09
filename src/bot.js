@@ -102,6 +102,12 @@ function watchApi() {
   fetch('https://api.holotools.app/v1/live?max_upcoming_hours=48&hide_channel_desc=1')
     .then(res => res.json())
     .then(({ live }) => {
+      console.log('fetched');
+      for (let stream of currentlyStreaming.keys()) {
+        const isExist = live.find(live => live.yt_video_key === stream);
+        if (!isExist) currentlyStreaming.delete(stream);
+      }
+
       live.forEach(live => {
         if (!currentlyStreaming.has(live.yt_video_key)) {
           currentlyStreaming.add(live.yt_video_key)
