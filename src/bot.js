@@ -3,15 +3,16 @@ require('dotenv').config();
 const express = require('express');
 const fetch = require('node-fetch');
 const moment = require('moment');
-const app = express();
-const port = process.env.PORT || 5000;
-
-
 const Twit = require('twit');
+const app = express();
+
+
+const port = process.env.PORT || 5000;
 let clientIsReady = false;
 const { Client, MessageEmbed } = require('discord.js');
 const client = new Client();
 const PREFIX = "*";
+const fetchApiInterval = 300000;
 
 const hololiveMemberIds = {
   'suisei_hosimati': '975275878673408001',
@@ -74,10 +75,45 @@ const T = new Twit({
 
 client.login(process.env.DISCORDJS_BOT_TOKEN);
 
-client.on('ready', () => {
+const currentlyStreaming = new Set();
+
+client.on('ready', async () => {
   clientIsReady = true;
+  await setCurrentlyStreamingUser();
+  setInterval(watchApi, fetchApiInterval);
   console.log(`${client.user.tag} is ready`);
 })
+
+function setCurrentlyStreamingUser() {
+  return new Promise((res, rej) => {
+    fetch('https://api.holotools.app/v1/live?max_upcoming_hours=48&hide_channel_desc=1')
+      .then(res => res.json())
+      .then(({ live }) => {
+        live.forEach(live => {
+          currentlyStreaming.add(live.yt_video_key);
+        })
+        res();
+      })
+      .catch(err => rej(err))
+  })
+}
+
+function watchApi() {
+  fetch('https://api.holotools.app/v1/live?max_upcoming_hours=48&hide_channel_desc=1')
+    .then(res => res.json())
+    .then(({ live }) => {
+      live.forEach(live => {
+        if (!currentlyStreaming.has(live.yt_video_key)) {
+          currentlyStreaming.add(live.yt_video_key)
+          const guild = client.guilds.cache.get('774885904443375626');
+          const channel = guild.channels.cache.find(c => c.name === 'livestreams');
+          channel.send(`**${live.channel.name}** is now live!`);
+          channel.send(`https://youtube.com/watch?v=${live.yt_video_key}`)
+        }
+      });
+    })
+}
+
 
 // T.get('users/show', { screen_name: '7216_2nd' }, (err, data, res) => {
 //   if (err) return console.log(err);
