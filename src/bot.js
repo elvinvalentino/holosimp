@@ -93,7 +93,7 @@ client.on('newTweet', data => {
     } else {
       channel.send(`**@${data.user.screen_name}** tweeted`);
     }
-    channel.send(`${headline}\nhttps://twitter.com/${data.user.screen_name}/status/${data.id_str}`);
+    channel.send(`https://twitter.com/${data.user.screen_name}/status/${data.id_str}`);
   }
 })
 
