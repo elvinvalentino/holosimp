@@ -1,6 +1,8 @@
 require('dotenv').config();
 
 const express = require('express');
+const fetch = require('node-fetch');
+const moment = require('moment');
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -56,6 +58,7 @@ const hololiveMemberIds = {
   'pavoliareine': '1328275136575799297',
   'anyamelfissa': '1328277750000492545',
   'kureijiollie': '1328277233492844544',
+  'achan_UGA': '1064352899705143297',
   'hololive_Id': '1204978594490961920',
   'hololive_En': '1198438560224829442',
   'hololive_Jp': '1279066164186906629',
@@ -69,15 +72,21 @@ const T = new Twit({
   access_token_secret: process.env.ACCESS_TOKEN_SECRET
 });
 
+client.login(process.env.DISCORDJS_BOT_TOKEN);
+
+client.on('ready', () => {
+  clientIsReady = true;
+  console.log(`${client.user.tag} is ready`);
+})
+
 // T.get('users/show', { screen_name: '7216_2nd' }, (err, data, res) => {
 //   if (err) return console.log(err);
 //   console.log(data)
 // })
 
-client.login(process.env.DISCORDJS_BOT_TOKEN);
-
-client.on('ready', () => {
-  clientIsReady = true;
+const stream = T.stream('statuses/filter', { follow: Object.values(hololiveMemberIds) });
+stream.on('tweet', (tweet) => {
+  client.emit('newTweet', { data: tweet })
 })
 
 client.on('newTweet', data => {
@@ -95,11 +104,6 @@ client.on('newTweet', data => {
     }
     channel.send(`https://twitter.com/${data.user.screen_name}/status/${data.id_str}`);
   }
-})
-
-const stream = T.stream('statuses/filter', { follow: Object.values(hololiveMemberIds) });
-stream.on('tweet', (tweet) => {
-  client.emit('newTweet', { data: tweet })
 })
 
 client.on('message', message => {
@@ -125,10 +129,52 @@ client.on('message', message => {
     case 'status':
       message.channel.send('**Status: Alive**');
       break;
+    case 'livestream':
+    case 'ls':
+      runLiveStreamCmd(message);
+      break;
+    case 'upcominglivestream':
+    case 'uls':
+      runUpcomingLiveStreamCmd(message);
+      break;
     default:
       message.channel.send('Invalid command');
   }
 })
+
+function runLiveStreamCmd(message) {
+  fetch('https://api.holotools.app/v1/live?max_upcoming_hours=48&hide_channel_desc=1')
+    .then(res => res.json())
+    .then(({ live }) => {
+      const embed = new MessageEmbed();
+      embed
+        .setTitle('Currently Streaming')
+        .setColor('#ff0000')
+        .addFields(live.map(live => ({
+          name: `**${live.channel.name}**`,
+          value: `[${live.title}](https://youtube.com/watch?v=${live.yt_video_key})`
+        })))
+      message.channel.send(embed);
+    })
+}
+
+function runUpcomingLiveStreamCmd(message) {
+  fetch('https://api.holotools.app/v1/live?max_upcoming_hours=48&hide_channel_desc=1')
+    .then(res => res.json())
+    .then(({ upcoming }) => {
+      upcoming.sort((a, b) => new Date(a.live_schedule) - new Date(b.live_schedule));
+
+      const embed = new MessageEmbed();
+      embed
+        .setTitle('Upcoming Stream')
+        .setColor('#ff0000')
+        .addFields(upcoming.map(upcoming => ({
+          name: `**${upcoming.channel.name}** ${moment(upcoming.live_schedule).endOf().fromNow()}`,
+          value: `[${upcoming.title}](https://youtube.com/watch?v=${upcoming.yt_video_key})`
+        })));
+      message.channel.send(embed);
+    })
+}
 
 app.get("/", (req, res) => {
   res.end('Nothing to see here')
