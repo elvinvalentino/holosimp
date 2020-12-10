@@ -127,7 +127,7 @@ function watchApi() {
 
         live.forEach(live => {
           if (!currentlyStreaming.has(live.yt_video_key)) {
-            if (guild.name === client.guilds.cache.last().name) {
+            if (guild.id === client.guilds.cache.last().id) {
               currentlyStreaming.add(live.yt_video_key)
             }
             const channel = guild.channels.cache.get(channelId);
@@ -169,6 +169,26 @@ client.on('newTweet', data => {
     }
   })
 
+})
+
+client.on('guildCreate', async guild => {
+  configCache[guild.id] = {};
+  mongo().then(async mongoose => {
+    try {
+      await ConfigSchema.findOneAndUpdate(
+        { _id: guild.id },
+        {
+          _id: guild.id,
+          prefix: '*'
+        },
+        {
+          upsert: true
+        }
+      )
+    } finally {
+      mongoose.connection.close();
+    }
+  })
 })
 
 client.on('message', async message => {
