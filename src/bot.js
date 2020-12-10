@@ -82,8 +82,6 @@ const currentlyStreaming = new Set();
 
 client.on('ready', async () => {
   clientIsReady = true;
-  // await setCurrentlyStreamingUser();
-  // setInterval(watchApi, fetchApiInterval);
   await mongo().then(async mongoose => {
     try {
       console.log('Mongodb is connected');
@@ -95,8 +93,8 @@ client.on('ready', async () => {
       mongoose.connection.close();
     }
   })
-  watchApi();
-  console.log(configCache)
+  await setCurrentlyStreamingUser();
+  setInterval(watchApi, fetchApiInterval);
   console.log(`${client.user.tag} is ready`);
 })
 
@@ -125,7 +123,6 @@ function watchApi() {
 
       client.guilds.cache.forEach(async guild => {
         const channelId = configCache[guild.id].hasOwnProperty('streamChannelId') ? configCache[guild.id].streamChannelId : await getLiveStramChannel(guild.id);
-        console.log({ name: guild.name, channelId });
         if (!channelId || channelId === 'empty') return;
 
         live.forEach(live => {
@@ -159,7 +156,6 @@ client.on('newTweet', data => {
   client.guilds.cache.forEach(async guild => {
     if (Object.values(hololiveMemberIds).includes(data.user.id_str)) {
       const channelId = configCache[guild.id].hasOwnProperty('tweetChannelId') ? configCache[guild.id].tweetChannelId : await getTweetChannel(guild.id);
-      console.log({ name: guild.name, channelId });
       if (!channelId || channelId === 'empty') return;
       const channel = guild.channels.cache.get(channelId);
       if (data.in_reply_to_status_id) {
@@ -242,7 +238,6 @@ function sendHelp(message) {
 }
 
 function getPrefix(guildId) {
-  console.log('Fetch from database');
   return new Promise((res, rej) => {
     try {
       mongo().then(async mongoose => {
@@ -313,7 +308,6 @@ async function setPrefix(args, message) {
 }
 
 function getTweetChannel(guildId) {
-  console.log('Fetch from database tweetchannel');
   return new Promise((res, rej) => {
     try {
       mongo().then(async mongoose => {
@@ -373,7 +367,6 @@ async function setTweetChannel(args, message) {
 }
 
 function getLiveStramChannel(guildId) {
-  console.log('Fetch from database livescreamchannel');
   return new Promise((res, rej) => {
     try {
       mongo().then(async mongoose => {
