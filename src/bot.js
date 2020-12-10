@@ -82,8 +82,8 @@ const currentlyStreaming = new Set();
 
 client.on('ready', async () => {
   clientIsReady = true;
-  await setCurrentlyStreamingUser();
-  setInterval(watchApi, fetchApiInterval);
+  // await setCurrentlyStreamingUser();
+  // setInterval(watchApi, fetchApiInterval);
   await mongo().then(async mongoose => {
     try {
       console.log('Mongodb is connected');
@@ -95,6 +95,7 @@ client.on('ready', async () => {
       mongoose.connection.close();
     }
   })
+  watchApi();
   console.log(configCache)
   console.log(`${client.user.tag} is ready`);
 })
@@ -129,12 +130,15 @@ function watchApi() {
 
         live.forEach(live => {
           if (!currentlyStreaming.has(live.yt_video_key)) {
-            currentlyStreaming.add(live.yt_video_key)
+            if (guild.name === client.guilds.cache.last().name) {
+              currentlyStreaming.add(live.yt_video_key)
+            }
             const channel = guild.channels.cache.get(channelId);
             channel.send(`**${live.channel.name}** is now live!\nhttps://youtube.com/watch?v=${live.yt_video_key}`);
           }
         })
       })
+
     })
 }
 
