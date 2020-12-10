@@ -84,13 +84,18 @@ client.on('ready', async () => {
   clientIsReady = true;
   await setCurrentlyStreamingUser();
   setInterval(watchApi, fetchApiInterval);
-  mongo().then(async mongoose => {
+  await mongo().then(async mongoose => {
     try {
       console.log('Mongodb is connected');
+      const configs = await ConfigSchema.find();
+      configs.forEach(config => {
+        configCache[config._id] = {}
+      })
     } finally {
       mongoose.connection.close();
     }
   })
+  console.log(configCache)
   console.log(`${client.user.tag} is ready`);
 })
 
@@ -118,7 +123,7 @@ function watchApi() {
       }
 
       client.guilds.cache.forEach(async guild => {
-        const channelId = configCache[guild.id]?.streamChannelId || await getLiveStramChannel(guild.id);
+        const channelId = configCache[guild.id].hasOwnProperty('streamChannelId') ? configCache[guild.id].streamChannelId : await getLiveStramChannel(guild.id);
         console.log({ name: guild.name, channelId });
         if (!channelId || channelId === 'empty') return;
 
@@ -149,7 +154,7 @@ client.on('newTweet', data => {
   data = data.data
   client.guilds.cache.forEach(async guild => {
     if (Object.values(hololiveMemberIds).includes(data.user.id_str)) {
-      const channelId = configCache[guild.id]?.tweetChannelId || await getTweetChannel(guild.id);
+      const channelId = configCache[guild.id].hasOwnProperty('tweetChannelId') ? configCache[guild.id].tweetChannelId : await getTweetChannel(guild.id);
       console.log({ name: guild.name, channelId });
       if (!channelId || channelId === 'empty') return;
       const channel = guild.channels.cache.get(channelId);
@@ -168,7 +173,7 @@ client.on('newTweet', data => {
 
 client.on('message', async message => {
   const guildId = message.guild.id;
-  let PREFIX = configCache[guildId]?.prefix || await getPrefix(guildId);
+  let PREFIX = configCache[guildId].hasOwnProperty('prefix') ? configCache[guildId].prefix : await getPrefix(guildId);
   if (!PREFIX) PREFIX = '*';
   if (message.author.bot) return;
   if (!message.content.startsWith(PREFIX)) return;
