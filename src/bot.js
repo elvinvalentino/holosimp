@@ -6,13 +6,16 @@ const moment = require('moment');
 const Twit = require('twit');
 const app = express();
 
-
 const port = process.env.PORT || 5000;
 let clientIsReady = false;
 const { Client, MessageEmbed } = require('discord.js');
 const client = new Client();
-const PREFIX = "*";
+const mongo = require('./mongo');
 const fetchApiInterval = 300000;
+const ConfigSchema = require('./configSchema');
+
+const invalidCommandMessage = 'Invalid Command, please type *<prefix>*help to see the commands';
+const configCache = {};
 
 const hololiveMemberIds = {
   'suisei_hosimati': '975275878673408001',
@@ -81,6 +84,13 @@ client.on('ready', async () => {
   clientIsReady = true;
   await setCurrentlyStreamingUser();
   setInterval(watchApi, fetchApiInterval);
+  mongo().then(async mongoose => {
+    try {
+      console.log('Mongodb is connected');
+    } finally {
+      mongoose.connection.close();
+    }
+  })
   console.log(`${client.user.tag} is ready`);
 })
 
@@ -102,21 +112,24 @@ function watchApi() {
   fetch('https://api.holotools.app/v1/live?max_upcoming_hours=48&hide_channel_desc=1')
     .then(res => res.json())
     .then(({ live }) => {
-      console.log('fetched');
       for (let stream of currentlyStreaming.keys()) {
         const isExist = live.find(live => live.yt_video_key === stream);
         if (!isExist) currentlyStreaming.delete(stream);
       }
 
-      live.forEach(live => {
-        if (!currentlyStreaming.has(live.yt_video_key)) {
-          currentlyStreaming.add(live.yt_video_key)
-          const guild = client.guilds.cache.get('774885904443375626');
-          const channel = guild.channels.cache.find(c => c.name === 'livestreams');
-          channel.send(`**${live.channel.name}** is now live!`);
-          channel.send(`https://youtube.com/watch?v=${live.yt_video_key}`)
-        }
-      });
+      client.guilds.cache.forEach(async guild => {
+        const channelId = configCache[guild.id]?.streamChannelId || await getLiveStramChannel(guild.id);
+        console.log({ name: guild.name, channelId });
+        if (!channelId || channelId === 'empty') return;
+
+        live.forEach(live => {
+          if (!currentlyStreaming.has(live.yt_video_key)) {
+            currentlyStreaming.add(live.yt_video_key)
+            const channel = guild.channels.cache.get(channelId);
+            channel.send(`**${live.channel.name}** is now live!\nhttps://youtube.com/watch?v=${live.yt_video_key}`);
+          }
+        })
+      })
     })
 }
 
@@ -133,22 +146,30 @@ stream.on('tweet', (tweet) => {
 
 client.on('newTweet', data => {
   if (!clientIsReady) return;
-  const guild = client.guilds.cache.get('774885904443375626');
-  const channel = guild.channels.cache.find(c => c.name === 'tweets');
   data = data.data
-  if (Object.keys(hololiveMemberIds).includes(data.user.screen_name)) {
-    if (data.in_reply_to_status_id) {
-      channel.send(`**@${data.user.screen_name}** replied`);
-    } else if (data.hasOwnProperty('retweeted_status')) {
-      channel.send(`**@${data.user.screen_name}** retweeted`);
-    } else {
-      channel.send(`**@${data.user.screen_name}** tweeted`);
+  client.guilds.cache.forEach(async guild => {
+    if (Object.values(hololiveMemberIds).includes(data.user.id_str)) {
+      const channelId = configCache[guild.id]?.tweetChannelId || await getTweetChannel(guild.id);
+      console.log({ name: guild.name, channelId });
+      if (!channelId || channelId === 'empty') return;
+      const channel = guild.channels.cache.get(channelId);
+      if (data.in_reply_to_status_id) {
+        channel.send(`**@${data.user.screen_name}** replied`);
+      } else if (data.hasOwnProperty('retweeted_status')) {
+        channel.send(`**@${data.user.screen_name}** retweeted`);
+      } else {
+        channel.send(`**@${data.user.screen_name}** tweeted`);
+      }
+      channel.send(`https://twitter.com/${data.user.screen_name}/status/${data.id_str}`);
     }
-    channel.send(`https://twitter.com/${data.user.screen_name}/status/${data.id_str}`);
-  }
+  })
+
 })
 
-client.on('message', message => {
+client.on('message', async message => {
+  const guildId = message.guild.id;
+  let PREFIX = configCache[guildId]?.prefix || await getPrefix(guildId);
+  if (!PREFIX) PREFIX = '*';
   if (message.author.bot) return;
   if (!message.content.startsWith(PREFIX)) return;
   if (!message.guild) return;
@@ -157,6 +178,17 @@ client.on('message', message => {
     .substring(PREFIX.length)
     .split(/\s+/);
   switch (CMD_NAME) {
+    case 'setprefix':
+      setPrefix(args, message);
+      break;
+    case 'settweetchannel':
+    case 'stc':
+      setTweetChannel(args, message);
+      break;
+    case 'setlivestreamchannel':
+    case 'slc':
+      setLivestreamChannel(args, message);
+      break;
     case 'sendtojail':
       message.channel.send(`Sent ${args[0]} to jail 🚓`);
       break;
@@ -179,10 +211,218 @@ client.on('message', message => {
     case 'uls':
       runUpcomingLiveStreamCmd(message);
       break;
+    case 'help':
+      sendHelp(message);
+      break;
     default:
-      message.channel.send('Invalid command');
+      message.channel.send(invalidCommandMessage);
   }
 })
+
+function sendHelp(message) {
+  const embed = new MessageEmbed();
+  embed.setTitle('Help')
+    .setDescription(`
+      **setprefix** - change prefix
+      **settweetchannel / stc** - set channel to send tweet
+      **setlivestreamchannel / slc** - set channel to notify livestream
+      **livesream / ls** - get curently streaming list
+      **upcominglivestream / uls** - get upcoming stream list
+    `)
+  message.channel.send(embed)
+}
+
+function getPrefix(guildId) {
+  console.log('Fetch from database');
+  return new Promise((res, rej) => {
+    try {
+      mongo().then(async mongoose => {
+        try {
+          const config = await ConfigSchema.findById(guildId);
+          if (config) {
+            if (!config.prefix) {
+              await ConfigSchema.findByIdAndUpdate(guildId, {
+                _id: guildId,
+                prefix: '*'
+              })
+            }
+
+            configCache[guildId] = {
+              ...configCache[guildId],
+              prefix: config.prefix || '*'
+            }
+            res(config.prefix);
+          } else {
+            await new ConfigSchema({
+              _id: guildId,
+              prefix: '*'
+            }).save();
+            configCache[guildId] = {
+              ...configCache[guildId],
+              prefix: '*'
+            }
+            res(false)
+          }
+        } finally {
+          mongoose.connection.close();
+        }
+      })
+    } catch (err) {
+      rej(err)
+    }
+  })
+}
+
+async function setPrefix(args, message) {
+  if (args.length > 1) return message.channel.send(invalidCommandMessage);
+  const prefix = args[0];
+  const guildId = message.guild.id;
+  configCache[guildId] = {
+    ...configCache[guildId],
+    prefix
+  }
+
+  await mongo().then(async mongoose => {
+    try {
+      await ConfigSchema.findByIdAndUpdate(
+        { _id: guildId },
+        {
+          _id: guildId,
+          prefix
+        },
+        {
+          upsert: true
+        }
+      )
+    } finally {
+      mongoose.connection.close();
+    }
+  })
+
+  message.channel.send(`Prefix set to ${prefix}`);
+
+}
+
+function getTweetChannel(guildId) {
+  console.log('Fetch from database tweetchannel');
+  return new Promise((res, rej) => {
+    try {
+      mongo().then(async mongoose => {
+        try {
+          const config = await ConfigSchema.findOne({ _id: guildId });
+          if (config.tweetChannelId) {
+            configCache[guildId] = {
+              ...configCache[guildId],
+              tweetChannelId: config.tweetChannelId
+            }
+            res(config.tweetChannelId);
+          } else {
+            configCache[guildId] = {
+              ...configCache[guildId],
+              tweetChannelId: 'empty'
+            }
+            res(false);
+          }
+        } finally {
+          mongoose.connection.close();
+        }
+      })
+    } catch (err) {
+      rej(err);
+    }
+  })
+}
+
+async function setTweetChannel(args, message) {
+  if (args.length > 0) return message.channel.send(invalidCommandMessage)
+  const channelId = message.channel.id;
+  const guildId = message.guild.id;
+
+  configCache[guildId] = {
+    ...configCache[guildId],
+    tweetChannelId: channelId
+  }
+
+  await mongo().then(async mongoose => {
+    try {
+      await ConfigSchema.findByIdAndUpdate(
+        { _id: guildId },
+        {
+          _id: guildId,
+          tweetChannelId: channelId
+        },
+        {
+          upsert: true
+        }
+      )
+    } finally {
+      mongoose.connection.close();
+    }
+  })
+
+  message.channel.send(`Every tweets will be send to this channel!`);
+}
+
+function getLiveStramChannel(guildId) {
+  console.log('Fetch from database livescreamchannel');
+  return new Promise((res, rej) => {
+    try {
+      mongo().then(async mongoose => {
+        try {
+          const config = await ConfigSchema.findOne({ _id: guildId });
+          if (config.streamChannelId) {
+            configCache[guildId] = {
+              ...configCache[guildId],
+              streamChannelId: config.streamChannelId
+            }
+            res(config.streamChannelId);
+          } else {
+            configCache[guildId] = {
+              ...configCache[guildId],
+              streamChannelId: 'empty'
+            }
+            res(false);
+          }
+        } finally {
+          mongoose.connection.close();
+        }
+      })
+    } catch (err) {
+      rej(err);
+    }
+  })
+}
+
+async function setLivestreamChannel(args, message) {
+  if (args.length > 0) return message.channel.send(invalidCommandMessage);
+
+  const channelId = message.channel.id;
+  const guildId = message.guild.id;
+
+  configCache[guildId] = {
+    ...configCache[guildId],
+    streamChannelId: channelId
+  }
+
+  await mongo().then(async mongoose => {
+    try {
+      await ConfigSchema.findByIdAndUpdate(
+        { _id: guildId },
+        {
+          _id: guildId,
+          streamChannelId: channelId
+        },
+        {
+          upsert: true
+        }
+      )
+    } finally {
+      mongoose.connection.close();
+    }
+  })
+
+  message.channel.send(`Every livestream notification will be send to this channel!`);
+}
 
 function runLiveStreamCmd(message) {
   fetch('https://api.holotools.app/v1/live?max_upcoming_hours=48&hide_channel_desc=1')
