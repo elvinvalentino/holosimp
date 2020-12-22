@@ -1,0 +1,1 @@
+module.exports = 'Invalid Command, please type *<prefix>*help to see the commands';
